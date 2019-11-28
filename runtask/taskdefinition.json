@@ -1,0 +1,26 @@
+{
+    "family": "reinvent2019-con414",
+    "networkMode": "awsvpc",
+    "executionRoleArn": "EXECUTIONROLE",
+    "containerDefinitions": [
+        {
+            "name": "httpd-auth",
+            "image": "ECRIMAGE",
+            "essential": true,
+            "logConfiguration": {
+            	"logDriver": "awslogs",
+            	"options": {
+	    		"awslogs-group": "/reinvent2019/con414",
+            		"awslogs-region": "us-west-2",
+            		"awslogs-stream-prefix": "httpd-auth",
+			"awslogs-create-group": "true"
+            	}
+	    }
+        }
+    ],
+    "cpu": "1024",
+    "memory": "2048",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ]
+}

@@ -103,47 +103,13 @@ Resources:
     Properties:
       GroupDescription: Access to the Fargate containers
       VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        # Allow access to task from anywhere on the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
 
-  # This is an IAM role which authorizes ECS to manage resources on your
-  # account on your behalf, such as updating your load balancer with the
-  # details of where your containers are, so that traffic can reach your
-  # containers.
-  ECSRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: [ecs.amazonaws.com]
-          Action: ['sts:AssumeRole']
-      Path: /
-      Policies:
-      - PolicyName: ecs-service
-        PolicyDocument:
-          Statement:
-          - Effect: Allow
-            Action:
-              # Rules which allow ECS to attach network interfaces to instances
-              # on your behalf in order for awsvpc networking mode to work right
-              - 'ec2:AttachNetworkInterface'
-              - 'ec2:CreateNetworkInterface'
-              - 'ec2:CreateNetworkInterfacePermission'
-              - 'ec2:DeleteNetworkInterface'
-              - 'ec2:DeleteNetworkInterfacePermission'
-              - 'ec2:Describe*'
-              - 'ec2:DetachNetworkInterface'
-
-              # Rules which allow ECS to update load balancers on your behalf
-              # with the information sabout how to send traffic to your containers
-              - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
-              - 'elasticloadbalancing:DeregisterTargets'
-              - 'elasticloadbalancing:Describe*'
-              - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
-              - 'elasticloadbalancing:RegisterTargets'
-            Resource: '*'
-
-  # This is a role which is used by the ECS tasks themselves.
+  # This is a role which is used by the ECS on behalf of tasks to download
+  # images from repositories and to publish logs to cloudwatch.
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -168,6 +134,7 @@ Resources:
 
                 # Allow the ECS tasks to upload logs to CloudWatch
                 - 'logs:CreateLogStream'
+                - 'logs:CreateLogGroup'
                 - 'logs:PutLogEvents'
               Resource: '*'
   
@@ -186,11 +153,6 @@ Outputs:
     Value: !Ref 'ECSCluster'
     Export:
       Name: !Sub ${EnvironmentName}:ClusterName
-  ECSRole:
-    Description: The ARN of the ECS role
-    Value: !GetAtt 'ECSRole.Arn'
-    Export:
-      Name: !Sub ${EnvironmentName}:ECSRole
   ECSTaskExecutionRole:
     Description: The ARN of the ECS role
     Value: !GetAtt 'ECSTaskExecutionRole.Arn'
