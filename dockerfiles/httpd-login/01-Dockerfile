@@ -1,0 +1,15 @@
+# This is the base image for our container. 
+FROM debian:stable-slim
+# Install apache, nginx and ssh.
+RUN apt-get update && apt-get install -y apache2-utils nginx openssh-server
+# Create the requisite directories for ssh daemon and fargate user for apache.
+RUN mkdir -p /run/sshd
+RUN mkdir -p /etc/fargate
+# Copy the nginx config to front the webserver.
+COPY nginx-config /etc/nginx/sites-available/default
+# This is the command that runs when you run the container. It checks if the
+# HTPASSWD env var is set. If its not set, the container exits with code `42`.
+# If the env var is set, the contents of the env var are written to the password
+# file. It then starts sshd, nginx in the background and then sleeps forever 
+# to prevent the container from exiting.
+CMD ["/bin/bash","-c","[ -z ${HTPASSWD} ] && exit 42 || echo ${HTPASSWD} > /etc/fargate/.htpasswd && echo ${HTPASSWD} && /usr/bin/ssh-keygen -A && /usr/sbin/sshd && service nginx start && sleep infinity"]

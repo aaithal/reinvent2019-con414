@@ -1,7 +1,14 @@
 # reinvent2019-con414
-Repository with sample code and cloudformation templates for reinvent2019 con414 session
+This repository contains the sample code and artifacts used in the CON414 builder session at AWS re:invent 2019.
 
-## Using resources in this repository
+## Learning objectives
+1. Building container images and storing them securely in an Elastic Container Registry(ECR) repository
+2. Creating resources required to run a container securely in AWS Fargate
+3. Securing access to containers running in AWS Fargate using security groups
+4. Using AWS Secrets Manager(ASM) to create store secrets
+5. Using ASM and Identity and Access Management (IAM) roles to securely bootstrap containers with secrets
+
+## Demo
 ### Prerequisites
 The following set of tools/software are required to run the commands listed in the next section:
 1. git
@@ -9,69 +16,76 @@ The following set of tools/software are required to run the commands listed in t
 3. jq
 4. aws cli (with output format set to JSON)
 5. ssh client 
-6. This repository has been cloned/downloaded
+6. This repository has been cloned/downloaded on the target machine
 
 ### 1. Setting up the infrastructure
-1. Create resources required to run Amazon Elastic Container Serviecs(ECS) tasks in AWS Fargate using the [cluster-fargate-public-vpc](cloudformation/cluster-fargate-public-vpc.yml) cloudformation template: `aws cloudformation create-stack --stack-name con414-cluster-fargate-public-vpc --template-body file://./cloudformation/cluster-fargate-public-vpc.yml --capabilities CAPABILITY_IAM`
-2. Wait for stack creation to complete: `aws cloudformation wait stack-create-complete --stack-name con414-cluster-fargate-public-vpc`
-3. Login to Elastic Container Registry (ECR) repository that was created in the previous step: `$(aws ecr get-login --no-include-email --region us-west-2)`
-4. Get the ECR repository URI: `ECR_REPO=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ECRContainerImageRepository"))' | jq -r '.[].OutputValue')`
-5. Build the `httpd-login` container using the [dockerfile](dockerfiles/httpd-login/Dockerfile): `cd dockerfiles/httpd-login; docker build -t ${ECR_REPO}:v1 .; cd -`
-6. Push the container image to the ECR repository: `docker push ${ECR_REPO}:v1`
+The goal of this section is to create all of the resources needed to run a contianer in AWS Fargate using an Amazon Elastic Container Service (ECS) task. You will use the [cluster-fargate-vpc](cloudformation/00-cluster-fargate-vpc.yml) cloudformation template to create the following resources:
+1. An Amazon Virtual Private Cloud (VPC) with public subnets and a security group
+2. An ECS cluster
+3. An IAM role used by ECS when starting the container (also referred to as a '[Task Execution Role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html)'
+4. An ECR repository
 
+Once these are created, you will build and push the `httpd-login` container image to the ECR repository that was created using the cloudformation template.
+
+The container image runs an `nginx` proxy fronting an apache webserver using `httpd`. It also starts an `ssh` daemon in the background. Subsequent sections in the demo show how we can secure these components. 
+   
+The instructions for setting up the infrastructure can be found at [here](demo-setting-up-infra.md).
+
+At this stage, you have successfully pushed your code into a secure container repository that can only be accessed if you have the relevant AWS permissions. This makes sure that malicious actors cannot override your build artifacts as ECR requires valid AWS IAM permissions to push container images. You can selectively grant permissions to this repository using [these instructions](https://docs.aws.amazon.com/AmazonECR/latest/userguide/RepositoryPolicyExamples.html).
+   
 ### 2. Running a Fargate task
-#### 2.1 Register the template task definition
-```
-ECR_IMAGE=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ECRContainerImageRepository"))' | jq -r '.[].OutputValue')
-ECR_IMAGE="${ECR_IMAGE}:v1"
-taskdef=$(cat runtask/taskdefinition.json | awk -v img="${ECR_IMAGE}" '{gsub("ECRIMAGE", img, $0); print}')
-TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json "${taskdef}" --query "taskDefinition.taskDefinitionArn" --output text)
-```
-#### 2.2 Prepare run-task parameters
-```
-CLUSTER=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ClusterName"))' | jq -r '.[].OutputValue')
-ECS_EXECUTION_ROLE=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ECSTaskExecutionRole"))' | jq -r '.[].OutputValue')
-SECURITY_GROUP=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ContainerSecurityGroup"))' | jq -r '.[].OutputValue')
-SUBNET=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="PublicSubnetOne"))' | jq -r '.[].OutputValue')
-```
-#### 2.3 Run the task
-```
-TASK_ARN=$(aws ecs run-task --cluster ${CLUSTER} \
-	--task-definition ${TASK_DEFINITION} \
-	--launch-type FARGATE \
-	--overrides "{\"executionRoleArn\": \"${ECS_EXECUTION_ROLE}\"}" \
-	--network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
-	--query "tasks[0].taskArn" \
-	--output text)
-```
-#### 2.4 Check if task is RUNNING
-```
-aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} \
-	--query "tasks[0].lastStatus" \
-	--output text
-```
-#### 2.5 Get the task public IPv4 address
-```
-TASK_ENI=$(aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} | jq '.tasks[0].attachments[0].details | map(select(.name=="networkInterfaceId"))' | jq -r '.[].value')
-TASK_IP=$(aws ec2 describe-network-interfaces --network-interface-ids ${TASK_ENI} --query "NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicIp" --output text)
-```
+The goal of this section is to run a container in Fargate as an ECS Task. In order to do this, you will need to:
+1. Register the container in ECS using an ECS task definition
+2. Run the container using the task definition and the `run-task` ECS api
 
-#### 2.6 Access the task IPv4 address
-1. Navigate to the task IPv4 address using a browser. You'll be asked for a username and a password
-2. Enter 'fargate' as the username and 'swordfish' as the password. You should be able to see the nginx landing page
-3. Try running the command `ssh ${TASK_IP}`. You should see a password prompt. We haven't set any ssh keys for the task. So, you will not be able to login
-4. Press CTRL-C to cancel
+The instructions for setting up the infrastructure can be found [here](demo-running-task-stage-1.md).
 
-#### 2.7 Fix security group rules for the task
-```
-### Drop the allow all rule
-aws ec2 revoke-security-group-ingress --group-id ${SECURITY_GROUP} --cidr 0.0.0.0/0 --protocol all
-### Add the rule to all HTTP access to the task
-aws ec2 authorize-security-group-ingress --group-id ${SECURITY_GROUP} --protocol tcp --port 80 --cidr 0.0.0.0/0
-```
-Repeat 2.6. You should still be able to access the IPv4 address via port 80 (on your browser). But, you will not be able to connect to the task using SSH since we have blocked it.
+At this stage, you are running your container in AWS Fargate in one of the VPC subnets, and are securing the access to this task using a security group as well. Fargate enforces a number of security best practices by default and you have utilized many of these:
+1. By running your container in a VPC, using the [`awsvpc`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html), you have ensured that each copy of your application gets its own distinct network stack (distinct IPv4 address, distincy Elastic Networking Interface(ENI) etc). You can further set up anamoly detection, alarming etc on suspcious network access patterns to your containers using VPC flow logs. Here's an example of analyzing [VPC flow logs using AWS Lambda](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/)
+2. By using Task Execution Role permissions, you have ensured that your container image was downloaded after an authentication & authorization scheme enforced by ECR. You have also ensured that your container logs will flow securely to Amazon Cloudwatch Logs using IAM role credentials over a secure TLS connection.
+3. If your webserver gets incredibly popular and you have to scale out fast without causing an availability event, you can flexibly scale out your container as an [ECS service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html). Some exmaples of the same can be found in this [github repository](https://github.com/nathanpeck/ecs-cloudformation) as well.
 
-#### 2.8 Stop the task
-```
-aws ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}
-```
+However, your container still has some security vulnerabilities: 
+* The container security group allows access to your task on ports `80`(HTTP) and `22`(SSH) for any IP address on the internet
+* Allowing any IP address on the internet SSH access to your container is a critical security risk as malicious actors could exploit it to
+ * Break into your container
+ * Cause availability events by flooding requests using multiple SSH clients (denial of service attack)
+
+You might still want to retain the SSH daemon for when you need to debug your container. But you can block access to the same for everyone on the internet and instead only allow trusted IP addresses or private IP addresses to connect over SSH to your containers.
+
+### 3. Securing access to the Fargate task   
+The goal of this section is to restrict the access to the container using security groups. 
+
+The instructions for the same can be found [here](demo-security-grou-restrictions.md).
+
+At this stage, you are running your container more securely in AWS Fargate. However, your container is still vulnerable to malicious actors. The login password for your webserver has been hardcoded into your container image. If you check the [Dockerfile](dockerfiles/httpd-login/00-Dockerfile) to a source code repository, you will leak/expose the password to your webserver to any one who has read access to the repository. We can remediate this threat by using the Amazon Secrets Manager to store this secret and using the [ECS integration](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data.html) to securely bootstrap our container with secrets.
+
+Before taking a look at the instructions for doing this, you can optionally stop this task: `aws ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}`
+
+### 4. Harderning the security posture of the Fargate task using ASM
+The goal of this section is to not hard code the application to your container image during build time, but to use ASM for the same. 
+
+The instructions for the same can be found [here](demo-updating-infra-with-asm.md).
+
+At this stage:
+1. You have rebuilt and pushed the container image so that the secret bootstrap happens during runtime, rather than at build time
+2. You have also created an ASM secret and updated the task execution role with permissions to access this secret
+3. Your container security group is also updated to only allow HTTP (port 80) traffic and block everything else
+
+### 5. Running an AWS Fargate task with ASM
+The goal of this section is to use the ASM integration with AWS Fargate, where the secret is passed as an environment variable to the container at run time using the ECS task definition.
+
+The instructions for the same can be found [here](demo-running-task-stage-2.md).
+
+At this stage you have achieved all of the security objects we set out to achieve with this demo. You can stop the task using the command `aws ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}`
+
+### 6. Cleaning up
+You can follow the instructions in [here](demo-cleaning-up-resources.md) to clean up resources that were used for this demo.
+
+### 7. Further exercise
+1. Set up AWS Cloudtrail alarms for your ECS resources [hint](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudwatch-alarms-for-cloudtrail.html)
+2. Set up VPC Flow log monitors for your VPC [hint](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/)
+3. Use KMS to encrypt your secret with ASM [hint](https://docs.aws.amazon.com/kms/latest/developerguide/services-secrets-manager.html) 
+4. Get this container running behind a load balancer as an ECS service [hint](https://github.com/nathanpeck/ecs-cloudformation)
+
+ 

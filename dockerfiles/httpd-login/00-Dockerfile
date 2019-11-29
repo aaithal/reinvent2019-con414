@@ -1,0 +1,15 @@
+# This is the base image for our container. 
+FROM debian:stable-slim
+# Install apache, nginx and ssh.
+RUN apt-get update && apt-get install -y apache2-utils nginx openssh-server
+# Create the requisite directories for ssh daemon and fargate user for apache.
+RUN mkdir -p /run/sshd
+RUN mkdir -p /etc/fargate
+# Copy the password file to the image.
+COPY htpasswd /etc/fargate/.htpasswd
+# Copy the nginx config to front the webserver.
+COPY nginx-config /etc/nginx/sites-available/default
+# This is the command that runs when you run the container. It starts
+# sshd, nginx in the background and then sleeps forever to prevent the
+# container from exiting.
+CMD ["/bin/bash","-c","/usr/bin/ssh-keygen -A && /usr/sbin/sshd && service nginx start && sleep infinity"]
