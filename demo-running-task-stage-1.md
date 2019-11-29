@@ -31,8 +31,10 @@ aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} \
 ```
 ### 5 Get the task public IPv4 address
 ```
+## Get the task ENI id
 TASK_ENI=$(aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} | jq '.tasks[0].attachments[0].details | map(select(.name=="networkInterfaceId"))' | jq -r '.[].value')
-TASK_IP=$(aws ec2 describe-network-interfaces --network-interface-ids ${TASK_ENI} --query "NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicIp" --output text)
+## Print the task ip address
+aws ec2 describe-network-interfaces --network-interface-ids ${TASK_ENI} --query "NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicIp" --output text
 ```
 ### 6 Access the task IPv4 address
 1. Navigate to the task IPv4 address using a browser. You'll be asked for a username and a password

@@ -22,7 +22,7 @@ The following set of tools/software are required to run the commands listed in t
 The goal of this section is to create all of the resources needed to run a contianer in AWS Fargate using an Amazon Elastic Container Service (ECS) task. You will use the [cluster-fargate-vpc](cloudformation/00-cluster-fargate-vpc.yml) cloudformation template to create the following resources:
 1. An Amazon Virtual Private Cloud (VPC) with public subnets and a security group
 2. An ECS cluster
-3. An IAM role used by ECS when starting the container (also referred to as a '[Task Execution Role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html)'
+3. An IAM role used by ECS when starting the container (also referred to as [Task Execution Role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html))
 4. An ECR repository
 
 Once these are created, you will build and push the `httpd-login` container image to the ECR repository that was created using the cloudformation template.
@@ -41,7 +41,7 @@ The goal of this section is to run a container in Fargate as an ECS Task. In ord
 The instructions for setting up the infrastructure can be found [here](demo-running-task-stage-1.md).
 
 At this stage, you are running your container in AWS Fargate in one of the VPC subnets, and are securing the access to this task using a security group as well. Fargate enforces a number of security best practices by default and you have utilized many of these:
-1. By running your container in a VPC, using the [`awsvpc`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html), you have ensured that each copy of your application gets its own distinct network stack (distinct IPv4 address, distincy Elastic Networking Interface(ENI) etc). You can further set up anamoly detection, alarming etc on suspcious network access patterns to your containers using VPC flow logs. Here's an example of analyzing [VPC flow logs using AWS Lambda](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/)
+1. By running your container in a VPC, using the [`awsvpc`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html), you have ensured that each copy of your application gets its own distinct network stack (distinct IPv4 address, distincy Elastic Networking Interface(ENI) etc). You can further set up anamoly detection, alarming etc on suspcious network access patterns to your containers using VPC flow logs. Here's an example of analyzing [VPC flow logs using AWS Lambda](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/).
 2. By using Task Execution Role permissions, you have ensured that your container image was downloaded after an authentication & authorization scheme enforced by ECR. You have also ensured that your container logs will flow securely to Amazon Cloudwatch Logs using IAM role credentials over a secure TLS connection.
 3. If your webserver gets incredibly popular and you have to scale out fast without causing an availability event, you can flexibly scale out your container as an [ECS service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html). Some exmaples of the same can be found in this [github repository](https://github.com/nathanpeck/ecs-cloudformation) as well.
 

@@ -33,12 +33,12 @@ aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} \
 ```
 ## 5 Get the task public IPv4 address
 ```
+## Get the task ENI id
 TASK_ENI=$(aws ecs describe-tasks --cluster ${CLUSTER} --task ${TASK_ARN} | jq '.tasks[0].attachments[0].details | map(select(.name=="networkInterfaceId"))' | jq -r '.[].value')
-TASK_IP=$(aws ec2 describe-network-interfaces --network-interface-ids ${TASK_ENI} --query "NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicIp" --output text)
+## Print the task ip address
+aws ec2 describe-network-interfaces --network-interface-ids ${TASK_ENI} --query "NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicIp" --output text
 ```
 ## 6 Access the task IPv4 address
 1. Navigate to the task IPv4 address using a browser. You'll be asked for a username and a password
 2. Enter 'fargate' as the username and 'swordfish' as the password. You should be able to see the nginx landing page
 3. Try running the command `ssh ${TASK_IP}`. There should be no prompt of any sort since access to this port is blocked by security group rules.
-
-
