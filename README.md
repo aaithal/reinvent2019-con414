@@ -29,7 +29,7 @@ Once these are created, you will build and push the `httpd-login` container imag
 
 The container image runs an `nginx` proxy fronting an apache webserver using `httpd`. It also starts an `ssh` daemon in the background. Subsequent sections in the demo show how we can secure these components. 
    
-The instructions for setting up the infrastructure can be found at [here](demo-setting-up-infra.md).
+The instructions for setting up the infrastructure can be found at [here](00-demo-setting-up-infra.md).
 
 At this stage, you have successfully pushed your code into a secure container repository that can only be accessed if you have the relevant AWS permissions. This makes sure that malicious actors cannot override your build artifacts as ECR requires valid AWS IAM permissions to push container images. You can selectively grant permissions to this repository using [these instructions](https://docs.aws.amazon.com/AmazonECR/latest/userguide/RepositoryPolicyExamples.html).
    
@@ -38,7 +38,7 @@ The goal of this section is to run a container in Fargate as an ECS Task. In ord
 1. Register the container in ECS using an ECS task definition
 2. Run the container using the task definition and the `run-task` ECS api
 
-The instructions for setting up the infrastructure can be found [here](demo-running-task-stage-1.md).
+The instructions for setting up the infrastructure can be found [here](01-demo-running-task-stage-1.md).
 
 At this stage, you are running your container in AWS Fargate in one of the VPC subnets, and are securing the access to this task using a security group as well. Fargate enforces a number of security best practices by default and you have utilized many of these:
 1. By running your container in a VPC, using the [`awsvpc`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking.html) networking mode, you have ensured that each copy of your application gets its own distinct network stack (distinct IPv4 address, distincy Elastic Networking Interface(ENI) etc). You can further set up anamoly detection, alarming etc on suspcious network access patterns to your containers using VPC flow logs. Here's an example of analyzing [VPC flow logs using AWS Lambda](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/).
@@ -56,16 +56,16 @@ You might still want to retain the SSH daemon for when you need to debug your co
 ### 3. Securing access to the Fargate task   
 The goal of this section is to restrict the access to the container using security groups. 
 
-The instructions for the same can be found [here](demo-security-grou-restrictions.md).
+The instructions for the same can be found [here](02-demo-security-group-restrictions.md).
 
 At this stage, you are running your container more securely in AWS Fargate. However, your container is still vulnerable to malicious actors. The login password for your webserver has been hardcoded into your container image. If you check the [Dockerfile](dockerfiles/httpd-login/00-Dockerfile) to a source code repository, you will leak/expose the password to your webserver to any one who has read access to the repository. We can remediate this threat by using the Amazon Secrets Manager to store this secret and using the [ECS integration](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data.html) to securely bootstrap our container with secrets.
 
-Before taking a look at the instructions for doing this, you can optionally stop this task: `aws ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}`
+Before taking a look at the instructions for doing this, you can optionally stop this task: `aws --region us-west-2 ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}`
 
 ### 4. Hardening the security posture of the Fargate task using ASM
 The goal of this section is to not hard code the application to your container image during build time, but to use ASM for the same. 
 
-The instructions for the same can be found [here](demo-updating-infra-with-asm.md).
+The instructions for the same can be found [here](03-demo-updating-infra-with-asm.md).
 
 At this stage:
 1. You have rebuilt and pushed the container image so that the secret bootstrap happens during runtime, rather than at build time
@@ -75,17 +75,15 @@ At this stage:
 ### 5. Running an AWS Fargate task with ASM
 The goal of this section is to use the ASM integration with AWS Fargate, where the secret is passed as an environment variable to the container at run time using the ECS task definition.
 
-The instructions for the same can be found [here](demo-running-task-stage-2.md).
+The instructions for the same can be found [here](04-demo-running-task-stage-2.md).
 
 At this stage you have achieved all of the security objects we set out to achieve with this demo. You can stop the task using the command `aws ecs stop-task --cluster ${CLUSTER} --task ${TASK_ARN}`
 
 ### 6. Cleaning up
-You can follow the instructions in [here](demo-cleaning-up-resources.md) to clean up resources that were used for this demo.
+You can follow the instructions in [here](05-demo-cleaning-up-resources.md) to clean up resources that were used for this demo.
 
 ### 7. Further exercise
 1. Set up AWS Cloudtrail alarms for your ECS resources [hint](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudwatch-alarms-for-cloudtrail.html)
 2. Set up VPC Flow log monitors for your VPC [hint](https://aws.amazon.com/blogs/mt/analyzing-vpc-flow-logs-got-easier-with-support-for-s3-as-a-destination/)
 3. Use KMS to encrypt your secret with ASM [hint](https://docs.aws.amazon.com/kms/latest/developerguide/services-secrets-manager.html) 
 4. Get this container running behind a load balancer as an ECS service [hint](https://github.com/nathanpeck/ecs-cloudformation)
-
- 
