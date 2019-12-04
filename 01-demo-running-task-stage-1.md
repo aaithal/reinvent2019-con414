@@ -9,7 +9,7 @@ TASK_DEFINITION=$(aws --region us-west-2 ecs register-task-definition --cli-inpu
 ### 2 Prepare run-task parameters
 ```
 CLUSTER=$(aws --region us-west-2 cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ClusterName"))' | jq -r '.[].OutputValue')
-ECS_EXECUTION_ROLE=$(aws cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ECSTaskExecutionRole"))' | jq -r '.[].OutputValue')
+ECS_EXECUTION_ROLE=$(aws cloudformation --region us-west-2 describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ECSTaskExecutionRole"))' | jq -r '.[].OutputValue')
 SECURITY_GROUP=$(aws --region us-west-2 cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="ContainerSecurityGroup"))' | jq -r '.[].OutputValue')
 SUBNET=$(aws --region us-west-2 cloudformation describe-stacks --stack-name con414-cluster-fargate-public-vpc | jq '.Stacks[0].Outputs | map(select(.OutputKey=="PublicSubnetOne"))' | jq -r '.[].OutputValue')
 ```
